@@ -99,7 +99,7 @@ module.exports = global.otto.db = do ->  # note the 'do' causes the function to 
 
           throw new Error 'mongod went away!'  # i guess we could wait and try reconnecting? FIXME
 
-        otto.misc.wait_for_socket db.dbconf.socket_file, 1500, (err) ->  # needed to be > 500 for linux
+        otto.misc.wait_for_socket db.dbconf.socket_file, 30000, (err) ->  # needed to be > 500 for linux
           if err then throw new Error err
           callback()
 
