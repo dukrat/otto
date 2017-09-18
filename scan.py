@@ -236,8 +236,6 @@ def parse_song_info(db, filename):
         elif extlc in ['wav']:
             # gonna have to extract from the filename
             print 'skipping wav file for now %s' % filename.encode('utf-8')
-        elif extlc in ['wma']:
-            tags = mutagen.id3.ID3(filename)
         elif extlc in important_extensions:
             tags = mutagen.File(filename)
         # uncomment this if you want to check every file regardless of extension
