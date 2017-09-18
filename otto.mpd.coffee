@@ -597,6 +597,11 @@ global.otto.mpd = do ->  # note 'do' calls the function
           format          "44100:16:1"
           #max_clients     "0"
         }
+        audio_output {
+          type            "alsa"
+          name            "default"
+          mixer_type     "software"
+        }
         # having the null output seems to avoid a bug in mpd when no listeners are connected
         audio_output {
           type            "null"
