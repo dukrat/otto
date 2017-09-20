@@ -1051,36 +1051,53 @@ module.exports = global.otto.db = do ->  # note the 'do' causes the function to 
             callback shuffle
 
 
-  db.cursor_skip_each = (positions, cursor, callback, position=0) ->
+  db.find_array_skip_each = (positions, find_array, callback, position=0) ->
     process.nextTick ->
-      s = new Date
-      if position is 0
-        if positions[position] is not 0
-          cursor.skip(positions[position] - 1)
-        new_position = position + 1
-      else if position is positions.length
-        cursor.close
+#      s = new Date
+      if position is positions.length
         callback null, null
-        return
       else
-        cursor.skip(positions[position] - positions[position - 1] - 1)
-        new_position = position + 1
-      cursor.nextObject (err, item) ->
-        if err?
-          return callback(err, null)
-        if item?
-          callback null, item
-          db.cursor_skip_each(positions, cursor, callback, new_position)
+        if positions[position] is 0
+          skip_num = 0
+        else if position is 0
+          skip_num = positions[position]
         else
-          cursor.close
-          callback err, null
-        return
+          skip_num = positions[position] - positions[position - 1]
+        cursor = c.objects.find(find_array...).sort({_id: 1}).skip(skip_num).limit(1)
+        position = position + 1
+        cursor.nextObject (err, item) ->
+          if err?
+            cursor.close
+            return callback(err, null)
+          if item?
+            cursor.close
+            callback null, item
+            if find_array[0].$or
+              for or_query in find_array[0].$or
+                or_query._id = { $gte: item._id }
+            else
+              find_array[0]._id = { $gte: item._id }
+            db.find_array_skip_each(positions, find_array, callback, position)
+          else
+            cursor.close
+            callback "unexpected end of corsor", null
+          return
       return
 
+  extend = exports.extend = (object, properties) ->
+    for key, val of properties
+      object[key] = val
+    object
 
-  db.cursor_skip_toArray = (positions, cursor, callback) ->
+  db.find_array_skip_toArray = (positions, find_array, callback) ->
     items = []
-    db.cursor_skip_each positions, cursor, (err, item) ->
+    if find_array[0].$or
+      for or_query in find_array[0].$or
+        if not or_query._id
+          extend or_query, _id: { $gte: mongodb.ObjectID "000000000000000000000000" }
+    else if not find_array[0]._id
+      extend find_array[0], _id: { $gte: mongodb.ObjectID "000000000000000000000000" }
+    db.find_array_skip_each positions, find_array, (err, item) ->
      if err?
        return callback(err, null)
      if item? and Array.isArray(items)
@@ -1103,6 +1120,35 @@ module.exports = global.otto.db = do ->  # note the 'do' causes the function to 
       for i in [0...howmany] by 1
         positions.push(Math.floor(Math.random() * count))
       positions.sort((a,b)->return a - b)
+      find_array = [ {otype: 10, length: {$lt: 900}} ]
+      db.find_array_skip_toArray positions, find_array, (err, picked_songs) ->
+        throw err if err
+        console.log "#{elapsed} randomWhere done, #{picked_songs.length} picked_songs"
+        db.attach_parents picked_songs, { otype: 1 }, ->
+          console.log "#{elapsed} parents attached"
+          # shuffle the order of the returned songs since mongodb will
+          # return them in 'natural' order. thus there will be a bias in the order of the random
+          # picks being in the order in which they were loaded into the database
+          shuffle = []
+          while picked_songs.length
+            n = Math.floor Math.random() * picked_songs.length
+            shuffle.push picked_songs[n]
+            picked_songs.splice(n, 1)
+          callback shuffle
+
+
+  db.Xget_random_songs = (howmany=1, callback) ->
+    console.log 'get_random_songs', howmany
+    elapsed = new otto.misc.Elapsed()
+    song_ids = []
+    # pick a slate of random songs, skipping anything over 15mins long
+    c.objects.find({ otype: 10, length: {$lt: 900} }, { _id: 1 }).count (err, count) ->
+      console.log "#{elapsed} count songs: #{count}"
+      positions = []
+      for i in [0...howmany] by 1
+        positions.push(Math.floor(Math.random() * count))
+      positions.sort((a,b)->return a - b)
+      console.log "#{positions}"
       cursor = c.objects.find( {otype: 10, length: {$lt: 900} })
       db.cursor_skip_toArray positions, cursor, (err, picked_songs) ->
         throw err if err
